@@ -38,4 +38,3 @@ Paddle Inference为飞桨核心框架推理引擎。Paddle Inference功能特性
 <h2 align="left">下一步</h2>
 
 - 如果您刚接触Paddle Inference， 请访问Quick start。
-- 如果你已经睡

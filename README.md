@@ -1,5 +1,10 @@
+<p align="center">
+    <br>
+<img src='https://user-images.githubusercontent.com/5595332/80305535-da711900-87ef-11ea-8822-c596368f90df.png' width = "380" height = "70">
+    <br>
+<p>
 
-<h2 align="center">Paddle Inference简介</h2>
+<h2 align="center">简介</h2>
 
 Paddle Inference为飞桨核心框架推理引擎。Paddle Inference功能特性丰富，性能优异，针对不同平台不同的应用场景进行了深度的适配优化,做到高吞吐、低时延，保证了飞桨模型在服务器端即训即用，快速部署。    
 
@@ -11,7 +16,7 @@ Paddle Inference为飞桨核心框架推理引擎。Paddle Inference功能特性
 	支持C++, Python, C, Go和R语言API, 接口简单灵活，20行代码即可完成部署。可通过Python API，实现对性能要求不太高的场景快速支持；通过C++高性能接口，可与线上系统联编；通过基础的C API可扩展支持更多语言的生产环境。
 
 
-<h2 align="center">Paddle Inference 核心功能</h2>
+<h2 align="center">核心功能</h2>
 
 - 内存/显存复用提升服务吞吐量  
 	在推理初始化阶段，对模型中的OP输出Tensor 进行依赖分析，将两两互不依赖的Tensor在内存/显存空间上进行复用，进而增大计算并行量，提升服务吞吐量。

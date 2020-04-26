@@ -1,416 +1,236 @@
+# 源码编译
 
+### 什么时候需要源码编译？
+
+深度学习的发展十分迅速，对科研或工程人员来说，可能会遇到一些需要自己开发op的场景，可以在python层面编写op，但如果对性能有严格要求的话则必须在C++层面开发op，对于这种情况，需要用户源码编译飞桨，使之生效。
+此外对于绝大多数使用C++将模型部署上线的工程人员来说，您可以直接通过飞桨官网下载已编译好的预测库，快捷开启飞桨使用之旅。[飞桨官网](https://www.paddlepaddle.org.cn/documentation/docs/zh/advanced_guide/inference_deployment/inference/build_and_install_lib_cn.html)提供了多个不同环境下编译好的预测库。如果用户环境与官网提供环境不一致（如cuda 、cudnn、tensorrt版本不一致等），或对飞桨源代码有修改需求，或希望进行定制化构建，可查阅本文档自行源码编译得到预测库。
+
+## 编译原理
+<h3 align="left">一：目标产物</h3>
+飞桨框架的源码编译包括源代码的编译和链接，最终生成的目标产物包括：
+
+ - 含有 C++ 接口的头文件及其二进制库：用于C++环境，将文件放到指定路径即可开启飞桨使用之旅。
+ - Python Wheel 形式的安装包：用于Python环境，此安装包需要参考[飞桨安装教程](https://www.paddlepaddle.org.cn/)进行安装操作。也就是说，前面讲的pip安装属于在线安装，这里属于本地安装。
+
+<h3 align="left">二：基础概念</h3>
+飞桨主要由C++语言编写，通过pybind工具提供了Python端的接口，飞桨的源码编译主要包括编译和链接两步。
+* 编译过程由编译器完成，编译器以编译单元（后缀名为 .cc 或 .cpp 的文本文件）为单位，将 C++ 语言 ASCII 源代码翻译为二进制形式的目标文件。一个工程通常由若干源码文件组织得到，所以编译完成后，将生成一组目标文件。
+* 链接过程使分离编译成为可能，由链接器完成。链接器按一定规则将分离的目标文件组合成一个能映射到内存的二进制程序文件，并解析引用。由于这个二进制文件通常包含源码中指定可被外部用户复用的函数接口，所以也被称作函数库。根据链接规则不同，链接可分为静态和动态链接。静态链接对目标文件进行归档；动态链接使用地址无关技术，将链接放到程序加载时进行。
+配合包含声明体的头文件（后缀名为 .h 或 .hpp），用户可以复用程序库中的代码开发应用。静态链接构建的应用程序可独立运行，而动态链接程序在加载运行时需到指定路径下搜寻其依赖的二进制库。
+
+<h3 align="left">三：编译方式</h3>
+
+飞桨框架的设计原则之一是满足不同平台的可用性。然而，不同操作系统惯用的编译和链接器是不一样的，使用它们的命令也不一致。比如，Linux 一般使用 GNU 编译器套件（GCC），Windows 则使用 Microsoft Visual C++（MSVC）。为了统一编译脚本，飞桨使用了支持跨平台构建的 CMake，它可以输出上述编译器所需的各种 Makefile 或者 Project 文件。    
+为方便编译，框架对常用的CMake命令进行了封装，如仿照 Bazel工具封装了 cc_binary 和 cc_library ，分别用于可执行文件和库文件的产出等，对CMake感兴趣的同学可在 cmake/generic.cmake 中查看具体的实现逻辑。Paddle的CMake中集成了生成python wheel包的逻辑，对如何生成wheel包感兴趣的同学可参考[相关文档](https://packaging.python.org/tutorials/packaging-projects/)。
+
+
+## 编译步骤
+
+飞桨分为 CPU 版本和 GPU 版本。如果您的计算机没有 Nvidia GPU，请选择 CPU 版本构建安装。如果您的计算机含有 Nvidia GPU（ 1.0 且预装有 CUDA / CuDNN，也可选择 GPU 版本构建安装。本节简述飞桨在常用环境下的源码编译方式，欢迎访问飞桨官网获取更详细内容。请阅读本节内容。
+
+<h3 align="left">推荐配置及依赖项</h3>
+
+1、稳定的互联网连接，主频 1 GHz 以上的多核处理器，9 GB 以上磁盘空间。  
+2、Python 版本 2.7 或 3.5 以上，pip 版本 9.0 及以上；CMake v3.5 及以上；Git 版本 2.17 及以上。请将可执行文件放入系统环境变量中以方便运行。  
+3、GPU 版本额外需要 Nvidia CUDA 9 / 10，CuDNN v7 及以上版本。根据需要还可能依赖 NCCL 和 TensorRT。  
+
+
+### 基于Ubuntu 18.04
+
+<h3 align="left">一：环境准备</h3>
+
+除了本节开头提到的依赖，在 Ubuntu 上进行飞桨的源码编译，您还需要准备 GCC8 编译器等工具，可使用下列命令安装：
+
+```
+sudo apt-get install gcc g++ make cmake git vim unrar python3 python3-dev python3-pip swig wget patchelf libopencv-dev
+pip3 install numpy protobuf wheel setuptools
+```
+
+若需启用 cuda 加速，需准备 cuda、cudnn、nccl。上述工具的安装请参考 nvidia 官网，以 cuda10.1，cudnn7.6 为例配置 cuda 环境。
+
+```
+# cuda
+sh cuda_10.1.168_418.67_linux.run
+export PATH=/usr/local/cuda-10.1/bin${PATH:+:${PATH}}
+export LD_LIBRARY_PATH=/usr/local/cuda-10.1/${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+
+# cudnn
+tar -xzvf cudnn-10.1-linux-x64-v7.6.4.38.tgz
+sudo cp -a cuda/include/cudnn.h /usr/local/cuda/include/
+sudo cp -a cuda/lib64/libcudnn* /usr/local/cuda/lib64/
+
+# nccl
+# install nccl local deb 参考https://docs.nvidia.com/deeplearning/sdk/nccl-install-guide/index.html
+sudo dpkg -i nccl-repo-ubuntu1804-2.5.6-ga-cuda10.1_1-1_amd64.deb
+# 根据安装提示，还需要执行sudo apt-key add /var/nccl-repo-2.5.6-ga-cuda10.1/7fa2af80.pub
+sudo apt update
+sudo apt install libnccl2 libnccl-dev
+
+sudo ldconfig
+```
+
+
+> 编译飞桨过程中可能会打开很多文件，Ubuntu 18.04 默认设置最多同时打开的文件数是1024（参见 ulimit -a），需要更改这个设定值。 
+
+
+在 /etc/security/limits.conf 文件中添加两行。
+
+```
+* hard noopen 102400
+* soft noopen 102400
+```
+重启计算机，重启后执行以下指令，请将${user}切换成当前用户名。
+
+```
+su ${user}
+ulimit -n 102400
+```
+
+<h3 align="left">二：编译命令</h3>
+
+使用 Git 将飞桨代码克隆到本地，并进入目录，切换到稳定版本（git tag显示的标签名，如v1.7.1）。  
+> 飞桨使用 develop 分支进行最新特性的开发，使用 release 分支发布稳定版本。在 GitHub 的 Releases 选项卡中，可以看到飞桨版本的发布记录。  
+
+```
+git clone https://github.com/PaddlePaddle/Paddle.git
+cd Paddle
+git checkout v1.7.1
+```    
+
+下面以 GPU 版本为例说明编译命令。其他环境可以参考“CMake编译选项表”修改对应的cmake选项。比如，若编译 CPU 版本，请将 WITH_GPU 设置为 OFF。
+
+
+```
+# 创建并进入 build 目录
+mkdir build_cuda && cd build_cuda
+# 执行cmake指令
+cmake -DPY_VERSION=3 \
+      -DWITH_TESTING=OFF \
+      -DWITH_MKL=ON \
+      -DWITH_GPU=ON \
+      -DON_INFER=ON \
+      -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      ..
+# 使用make编译
+make -j4
+# 编译成功后可在dist目录找到生成的.whl包
+pip3 install python/dist/paddlepaddle-1.7.1-cp36-cp36m-linux_x86_64.whl
 # 预测库编译
-
-PaddleLite已经提供官方Release预测库下载，请参考[文档](release_lib)。
-
-PaddleLite 提供了移动端的一键源码编译脚本 `lite/tools/build.sh`，编译流程如下：
-
-1. 环境准备（选择其一）：Docker交叉编译环境、Linux交叉编译环境
-2. 编译：调用`build.sh`脚本一键编译
-
-## 一、环境准备
-
-目前支持三种编译的环境：
-
-1. Docker 容器环境，
-2. Linux（推荐 Ubuntu 16.04）环境，
-3. Mac OS 环境。
-
-### 1、 Docker开发环境
-
-[Docker](https://www.docker.com/) 是一个开源的应用容器引擎, 使用沙箱机制创建独立容器，方便运行不同程序。Docker初学者可以参考[Docker使用方法](https://thenewstack.io/docker-station-part-one-essential-docker-concepts-tools-terminology/)正确安装Docker。
-
-#### 准备Docker镜像
-
-有两种方式准备Docker镜像，推荐从Dockerhub直接拉取Docker镜像
-
-```shell
-# 方式一：从Dockerhub直接拉取Docker镜像
-docker pull paddlepaddle/paddle-lite:2.0.0_beta
-
-# 方式二：本地源码编译Docker镜像
-git clone https://github.com/PaddlePaddle/Paddle-Lite.git
-cd Paddle-Lite/lite/tools
-mkdir mobile_image
-cp Dockerfile.mobile mobile_image/Dockerfile
-cd mobile_image
-docker build -t paddlepaddle/paddle-lite .
-
-# 镜像编译成功后，可用`docker images`命令，看到`paddlepaddle/paddle-lite`镜像。
+make inference_lib_dist -j4
 ```
 
-#### 进入Docker容器
 
-在拉取Paddle-Lite仓库代码的上层目录，执行如下代码，进入Docker容器：
+<h3 align="left">cmake编译环境表</h3>
 
-```shell
-docker run -it \
-  --name paddlelite_docker \
-  -v $PWD/Paddle-Lite:/Paddle-Lite \
-  --net=host \
-  paddlepaddle/paddle-lite /bin/bash
+以下介绍的编译方法都是通用步骤，根据环境对应修改cmake选项即可。
+
+|选项|说明|默认值|
+|:--:|:--:|:--:|
+|WITH_GPU|是否支持 GPU|ON|
+|WITH_AVX|是否编译含有 AVX 指令集的飞桨二进制文件|ON|
+|WITH_PYTHON|是否内嵌 PYTHON 解释器并编译 Wheel 安装包 |ON|
+|WITH_TESTING|是否开启单元测试|OFF|
+|WITH_MKL|是否使用 MKL 数学库，如果为否，将使用 OpenBLAS|ON|
+|WITH_SYSTEM_BLAS|是否使用系统自带的 BLAS|OFF|
+|WITH_DISTRIBUTE|是否编译带有分布式的版本|OFF|
+|WITH_BRPC_RDMA|是否使用 BRPC RDMA 作为 RPC 协议|OFF|
+|ON_INFER|是否打开预测优化|OFF|
+|CUDA_ARCH_NAME|是否只针对当前 CUDA 架构编译| All: 编译所有可支持的 CUDA 架构；Auto: 自动识别当前环境的架构编译|  
+
+
+## 基于Windows 10 
+
+<h3 align="left">一：环境准备</h3>
+除了本节开头提到的依赖，在 Windows 10 上编译飞桨，您还需要准备 Visual Studio 2015 Update3 以上版本。本节以 Visual Studio 企业版 2019（C++ 桌面开发，含 MSVC 14.24）、Python 3.8 为例介绍编译过程。
+
+在命令提示符输入下列命令，安装必需的 Python 组件。
+
+`pip3 install numpy protobuf wheel` 
+
+<h3 align="left">二：编译命令</h3>
+ 
+使用 Git 将飞桨代码克隆到本地，并进入目录，切换到稳定版本（git tag显示的标签名，如v1.7.1）。  
+> 飞桨使用 develop 分支进行最新特性的开发，使用 release 分支发布稳定版本。在 GitHub 的 Releases 选项卡中，可以看到 Paddle 版本的发布记录。  
+
+```
+git clone https://github.com/PaddlePaddle/Paddle.git
+cd Paddle
+git checkout v1.7.1
+```
+创建一个构建目录，并在其中执行 CMake，生成解决方案文件 Solution File，以编译 CPU 版本为例说明编译命令，其他环境可以参考“CMake编译选项表”修改对应的cmake选项。
+
+```
+mkdir build
+cd build
+cmake .. -G "Visual Studio 16 2019" -A x64 -DWITH_GPU=OFF -DWITH_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DPY_VERSION=3
+```
+<center><img src="https://agroup-bos.cdn.bcebos.com/1b21aff9424cb33a98f2d1e018d8301614caedda" width="400" ></center>
+使用 Visual Studio 打开解决方案文件，在窗口顶端的构建配置菜单中选择 Release x64，单击生成解决方案，等待构建完毕即可。  
+
+<h3 align="left">cmake编译环境表</h3>
+
+|选项|说明|默认值|
+|:--:|:--:|:--:|
+|WITH_GPU|是否支持 GPU|ON|
+|WITH_AVX|是否编译含有 AVX 指令集的飞桨二进制文件|ON|
+|WITH_PYTHON|是否内嵌 PYTHON 解释器并编译 Wheel 安装包 |ON|
+|`WITH_TESTING`|是否开启单元测试|OFF|
+|`WITH_MKL`|是否使用 MKL 数学库，如果为否，将使用 OpenBLAS|ON|
+|`WITH_SYSTEM_BLAS`|是否使用系统自带的 BLAS|OFF|
+|`WITH_DISTRIBUTE`|是否编译带有分布式的版本|OFF|
+|`WITH_BRPC_RDMA`|是否使用 BRPC RDMA 作为 RPC 协议|OFF|
+|`ON_INFER`|是否打开预测优化|OFF|
+|`CUDA_ARCH_NAM`E|是否只针对当前 CUDA 架构编译| All: 编译所有可支持的 CUDA 架构；Auto: 自动识别当前环境的架构编译|  
+
+<h2 align="left">结果验证/h2>
+
+<h3 align="left">一：python whl包</h3>
+编译完毕后，会在 python/dist 目录下生成一个文件名类似 paddlepaddle-1.7.1-cp36-cp36m-linux_x86_64.whl 的 Python Wheel 安装包，安装测试的命令为：  
+
+`pip3 install python/dist/paddlepaddle-1.7.1-cp36-cp36m-linux_x86_64.whl`
+
+安装完成后，可以使用 python3 进入python解释器，输入以下指令，出现`Your Paddle Fluid is installed succesfully! `，说明安装成功。
+```
+import paddle.fluid as fluid
+fluid.install_check.run_check()
 ```
 
-该命令的含义：将容器命名为`paddlelite_docker`即`<container-name>`，将当前目录下的`Paddle-Lite`文件夹挂载到容器中的`/Paddle-Lite`这个根目录下，并进入容器中。至此，完成Docker环境的准备。
+<h3 align="left">二：c++ lib</h3>
 
-#### Docker常用命令
+预测库编译后，所有产出均位于build目录下的fluid_inference_install_dir目录内，目录结构如下。version.txt 中记录了该预测库的版本信息，包括Git Commit ID、使用OpenBlas或MKL数学库、CUDA/CUDNN版本号。
 
-```shell
-# 退出容器但不停止/关闭容器：键盘同时按住三个键：CTRL + q + p
-
-# 启动停止的容器
-docker start <container-name>
-
-# 从shell进入已启动的容器
-docker attach <container-name>
-
-# 停止正在运行的Docker容器
-docker stop <container-name>
-
-# 重新启动正在运行的Docker容器
-docker restart <container-name>
-
-# 删除Docker容器
-docker rm <container-name>
+```
+build/fluid_inference_install_dir
+├── CMakeCache.txt
+├── paddle
+│   ├── include
+│   │   ├── paddle_anakin_config.h
+│   │   ├── paddle_analysis_config.h
+│   │   ├── paddle_api.h
+│   │   ├── paddle_inference_api.h
+│   │   ├── paddle_mkldnn_quantizer_config.h
+│   │   └── paddle_pass_builder.h
+│   └── lib
+│       ├── libpaddle_fluid.a (Linux)
+│       ├── libpaddle_fluid.so (Linux)
+│       └── libpaddle_fluid.lib (Windows)
+├── third_party
+│   ├── boost
+│   │   └── boost
+│   ├── eigen3
+│   │   ├── Eigen
+│   │   └── unsupported
+│   └── install
+│       ├── gflags
+│       ├── glog
+│       ├── mkldnn
+│       ├── mklml
+│       ├── protobuf
+│       ├── xxhash
+│       └── zlib
+└── version.txt
 ```
 
-### 2、Linux 开发环境
+Include目录下包括了使用飞桨预测库需要的头文件，lib目录下包括了生成的静态库和动态库，third_party目录下包括了预测库依赖的其它库文件。
 
-#### Android
-
-##### 交叉编译环境要求
-
-- gcc、g++、git、make、wget、python、adb
-- Java environment
-- cmake（建议使用3.10或以上版本）
-- Android NDK (建议ndk-r17c)
-
-##### 具体步骤
-
-安装软件部分以 Ubuntu 为例，其他 Linux 发行版类似。
-
-```shell
-# 1. Install basic software
-apt update
-apt-get install -y --no-install-recommends \
-  gcc g++ git make wget python unzip adb curl
-
-# 2. Prepare Java env.
-apt-get install -y default-jdk
-
-# 3. Install cmake 3.10 or above
-wget -c https://mms-res.cdn.bcebos.com/cmake-3.10.3-Linux-x86_64.tar.gz && \
-    tar xzf cmake-3.10.3-Linux-x86_64.tar.gz && \
-    mv cmake-3.10.3-Linux-x86_64 /opt/cmake-3.10 && \  
-    ln -s /opt/cmake-3.10/bin/cmake /usr/bin/cmake && \
-    ln -s /opt/cmake-3.10/bin/ccmake /usr/bin/ccmake
-
-# 4. Download Android NDK for linux-x86_64
-#     Note: Skip this step if NDK installed
-#     recommand android-ndk-r17c-darwin-x86_64
-#     ref: https://developer.android.com/ndk/downloads
-cd /tmp && curl -O https://dl.google.com/android/repository/android-ndk-r17c-linux-x86_64.zip
-cd /opt && unzip /tmp/android-ndk-r17c-linux-x86_64.zip
-
-# 5. Add environment ${NDK_ROOT} to `~/.bashrc` 
-echo "export NDK_ROOT=/opt/android-ndk-r17c" >> ~/.bashrc
-source ~/.bashrc
-```
-
-#### ARM Linux
-
-适用于基于 ARMv8 和 ARMv7 架构 CPU 的各种开发板，例如 RK3399，树莓派等，目前支持交叉编译和本地编译两种方式，对于交叉编译方式，在完成目标程序编译后，可通过 scp 方式将程序拷贝到开发板运行。
-
-##### 交叉编译
-
-###### 编译环境要求
-
-- gcc、g++、git、make、wget、python、scp
-- cmake（建议使用3.10或以上版本）
-
-###### 具体步骤
-
-安装软件部分以 Ubuntu 为例，其他 Linux 发行版类似。
-
-```shell
-# 1. Install basic software
-apt update
-apt-get install -y --no-install-recommends \
-  gcc g++ git make wget python unzip
-
-# 2. Install arm gcc toolchains
-apt-get install -y --no-install-recommends \
-  g++-arm-linux-gnueabi gcc-arm-linux-gnueabi \
-  g++-arm-linux-gnueabihf gcc-arm-linux-gnueabihf \
-  gcc-aarch64-linux-gnu g++-aarch64-linux-gnu 
-
-# 3. Install cmake 3.10 or above
-wget -c https://mms-res.cdn.bcebos.com/cmake-3.10.3-Linux-x86_64.tar.gz && \
-    tar xzf cmake-3.10.3-Linux-x86_64.tar.gz && \
-    mv cmake-3.10.3-Linux-x86_64 /opt/cmake-3.10 && \  
-    ln -s /opt/cmake-3.10/bin/cmake /usr/bin/cmake && \
-    ln -s /opt/cmake-3.10/bin/ccmake /usr/bin/ccmake
-```
-
-##### 本地编译（直接在RK3399或树莓派上编译）
-
-###### 编译环境要求
-
-- gcc、g++、git、make、wget、python
-- cmake（建议使用3.10或以上版本）
-
-###### 具体步骤
-
-安装软件部分以 Ubuntu 为例，其他 Linux 发行版本类似。
-
-```shell
-# 1. Install basic software
-apt update
-apt-get install -y --no-install-recomends \
-  gcc g++ make wget python unzip
-
-# 2. install cmake 3.10 or above
-wget https://www.cmake.org/files/v3.10/cmake-3.10.3.tar.gz
-tar -zxvf cmake-3.10.3.tar.gz
-cd cmake-3.10.3
-./configure
-make
-sudo make install
-```
-
-之后可通过cmake --version查看cmake是否安装成功。
-
-至此，完成 Linux 交叉编译环境的准备。
-
-### 3、Mac OS 开发环境
-
-#### 交叉编译环境要求
-
-- gcc、git、make、curl、unzip、java
-- cmake（Android编译请使用3.10版本，IOS编译请使用3.15版本）
-- 编译Android: Android NDK (建议ndk-r17c)
-- 编译IOS: XCode(Version 10.1)
-
-#### 具体步骤
-
-```bash
-# 1. Install basic software
-brew install  curl gcc git make unzip wget
-
-# 2. Install cmake: mac上实现IOS编译和Android编译要求的cmake版本不一致,可以根据需求选择安装。
-# （1）在mac环境编译 Paddle-Lite 的Android版本，需要安装cmake 3.10
-#     mkdir /usr/local/Cellar/cmake/ && cd /usr/local/Cellar/cmake/
-#     wget https://cmake.org/files/v3.10/cmake-3.10.2-Darwin-x86_64.tar.gz
-#     tar zxf ./cmake-3.10.2-Darwin-x86_64.tar.gz
-#     mv cmake-3.10.2-Darwin-x86_64/CMake.app/Contents/ ./3.10.2
-#     ln -s /usr/local/Cellar/cmake/3.10.2/bin/cmake /usr/local/bin/cmake
-# （2）在mac环境编译 Paddle-Lite 的IOS版本，需要安装cmake 3.15
-#     mkdir /usr/local/Cellar/cmake/ && cd /usr/local/Cellar/cmake/
-#     cd /usr/local/Cellar/cmake/
-#     wget https://cmake.org/files/v3.15/cmake-3.15.2-Darwin-x86_64.tar.gz
-#     tar zxf ./cmake-3.15.2-Darwin-x86_64.tar.gz
-#     mv cmake-3.15.2-Darwin-x86_64/CMake.app/Contents/ ./3.15.2
-#     ln -s /usr/local/Cellar/cmake/3.15.2/bin/cmake /usr/local/bin/cmake
-
-# 3. Download Android NDK for Mac
-#     recommand android-ndk-r17c-darwin-x86_64
-#     ref: https://developer.android.com/ndk/downloads
-#     Note: Skip this step if NDK installed
-cd ~/Documents && curl -O https://dl.google.com/android/repository/android-ndk-r17c-darwin-x86_64.zip
-cd ~/Library && unzip ~/Documents/android-ndk-r17c-darwin-x86_64.zip
-
-# 4. Add environment ${NDK_ROOT} to `~/.bash_profile` 
-echo "export NDK_ROOT=~/Library/android-ndk-r17c" >> ~/.bash_profile
-source ~/.bash_profile
-
-# 5. Install Java Environment 
-brew cask install java
-
-# 6. 编译IOS需要安装XCode(Version 10.1)，可以在App Store里安装。安装后需要启动一次并执行下面语句。
-# sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-```
-
-至此，完成 Mac 交叉编译环境的准备。
-
-**注意**: Mac上编译Paddle-Lite的full_publish版本时，Paddle-Lite所在路径中不可以含有中文字符
-
-## 二、编译PaddleLite
-
-**注：编译OpenCL、华为NPU、FPGA、CUDA、X86预测库、CV模块，见进阶使用指南的对应章节。**
-
-### 下载代码
-
-```shell
-git clone https://github.com/PaddlePaddle/Paddle-Lite.git
-cd Paddle-Lite
-git checkout <release-version-tag>
-```
-
-### 编译模式与参数
-
-编译脚本`./lite/tools/build.sh`，支持三种编译模式：
-
-| 编译模式 | 介绍 | 适用对象 |
-|:-------:|-----|:-------:|
-| tiny_publish | 编译移动端部署库，无第三方库依赖 | 用户 |
-| full_publish | 编译移动端部署库，有第三方依赖如protobuf、glags等，含有可将模型转换为无需protobuf依赖的naive buffer格式的工具，供tiny_publish库使用 | 用户 |
-| test | 编译指定`arm_os`、`arm_abi`下的移动端单元测试 | 框架开发者 |
-
-编译脚本`./lite/tools/build.sh`，追加参数说明：
-
-|   参数     |     介绍     |     值     |
-|-----------|-------------|-------------|
-| --arm_os   |必选，选择安装平台     | `android`、`ios`、`ios64`、`armlinux` |
-| --arm_abi  |必选，选择编译的arm版本，其中`armv7hf`为ARMLinux编译时选用| `armv8`、`armv7`、`armv7hf`(仅`armlinux`支持) |
-| --arm_lang |arm_os=android时必选，选择编译器 | `gcc`、`clang`(`clang`当前暂不支持) |
-| --android_stl |arm_os=android时必选，选择静态链接STL或动态链接STL | `c++_static`、`c++_shared`|
-| --build_java | 可选，是否编译java预测库（默认为ON） | `ON`、`OFF` |
-| --build_extra | 可选，是否编译全量预测库（默认为OFF）。详情可参考[预测库说明](./library.html)。 | `ON`、`OFF` |
-| target |必选，选择编译模式，`tiny_publish`为编译移动端部署库、`full_publish`为带依赖的移动端部署库、`test`为移动端单元测试、`ios`为编译ios端`tiny_publish` | `tiny_publish`、`full_publish`、`test`、 `ios` |
-
-### 编译代码
-
-**<font color="orange" >注意</font>**<font color="orange" >：非开发者建议在编译前使用</font>[**“加速第三方依赖库的下载”**](#id22)<font color="orange" >的方法，加速工程中第三方依赖库的下载与编译。 </font>
-
-#### 编译`tiny publish`动态库
-
-##### Android
-```shell
-./lite/tools/build.sh \
-  --arm_os=android \
-  --arm_abi=armv8 \
-  --build_extra=OFF \
-  --arm_lang=gcc \
-  --android_stl=c++_static \
-  tiny_publish
-```
-##### IOS
-```shell
-./lite/tools/build.sh \
-  --arm_os=ios64 \
-  --arm_abi=armv8 \
-  --build_extra=OFF \
-  ios
-```
-**注意：mac环境编译IOS 时，cmake版本需要高于cmake 3.15；mac环境上编译Android时，cmake版本需要设置为cmake 3.10。**
-
-ios tiny publish支持的编译选项：
-
-* `--arm_os`: 可选ios或者ios64
-* `--arm_abi`: 可选armv7和armv8（**注意**：当`arm_os=ios`时只能选择`arm_abi=armv7`，当`arm_os=ios64`时只能选择`arm_abi=armv8`）
-* 如果mac编译过程中报错："Invalid CMAKE_DEVELOPER_ROOT: does not exist", 运行：
-```shell
-sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-```
-##### ARMLinux
-```shell
-./lite/tools/build.sh \
-  --build_extra=OFF \
-  --arm_os=armlinux \
-  --arm_abi=armv7hf \
-  --arm_lang=gcc \
-  tiny_publish
-```
-- `--arm_abi`: 树莓派3b使用armv7hf，RK3399使用armv8
-  
-#### 编译`full publish`动态库
-
-##### Android
-```shell
-./lite/tools/build.sh \
-  --arm_os=android \
-  --arm_abi=armv8 \
-  --build_extra=OFF \
-  --arm_lang=gcc \
-  --android_stl=c++_static \
-  full_publish
-```
-##### ARMLinux
-```shell
-./lite/tools/build.sh \
-  --arm_os=armlinux \
-  --arm_abi=armv7hf \
-  --arm_lang=gcc \
-  --build_extra=OFF \
-  full_publish
-```
-- `--arm_abi`: 树莓派3b使用armv7hf，RK3399使用armv8
-  
-### 编译结果说明
-
-**编译最终产物位置**在 `build.lite.xxx.xxx.xxx` 下的 `inference_lite_lib.xxx.xxx` ，如 Android 下 ARMv8 的产物位于`inference_lite_lib.android.armv8`：
-
-![](https://user-images.githubusercontent.com/45189361/65375706-204e8780-dccb-11e9-9816-ab4563ce0963.png)
-
-**目录内容**（可能）如下：
-
-**Full_publish编译结果:**
-
-![](https://user-images.githubusercontent.com/45189361/65375704-19c01000-dccb-11e9-9650-6856c7a5bf82.png)
-
-**Tiny_publish结果:**
-
-![](https://user-images.githubusercontent.com/45189361/65375726-3bb99280-dccb-11e9-9903-8ce255371905.png)
-
-**IOS编译结果:**
-
-![](https://user-images.githubusercontent.com/45189361/65375726-3bb99280-dccb-11e9-9903-8ce255371905.png)
-
-
-
-**具体内容**说明：
-
-1、 `bin`文件夹：可执行工具文件 `paddle_code_generator`、`test_model_bin`
-
-2、 `cxx`文件夹：包含c++的库文件与相应的头文件
-
-- `include`  : 头文件
-- `lib` : 库文件
-  - 打包的静态库文件：
-    - `libpaddle_api_full_bundled.a`  ：包含 full_api 和 light_api 功能的静态库
-    - `libpaddle_api_light_bundled.a` ：只包含 light_api 功能的静态库
-  - 打包的动态态库文件：
-    - `libpaddle_full_api_shared.so` ：包含 full_api 和 light_api 功能的动态库
-    - `libpaddle_light_api_shared.so`：只包含 light_api 功能的动态库
-
-3、 `demo`文件夹：示例 demo ，包含 C++ demo 和  Java demo。
-
-- `cxx`   ： C++示例 demo
-  - `mobile_full` :  full_api 的使用示例
-  - `mobile_light` : light_api的使用示例
-- `java`  ：Java 示例 demo
-  - `android`  : Java的 Android 示例
-
-4、 `java` 文件夹：包含 Jni 的动态库文件与相应的 Jar 包
-
-- `jar` :  `PaddlePredictor.jar`
-- `so`  : Jni动态链接库  `libpaddle_lite_jni.so`
-
-5、 `third_party` 文件夹：第三方库文件`gflags`
-
-**注意：**
-
-1、 只有当`--arm_os=android` 时才会编译出：
-
-- Java库文件与示例：`Java`和`demo/java`
-
-- 动态库文件:`libpaddle_full_api_shared.so`,`libpaddle_light_api_shared.so`
-
-2、 `tiny_publish`编译结果不包括 C++ demo和 C++ 静态库，但提供 C++ 的 light_api 动态库、 Jni 动态库和Java demo
-
-### 加速第三方依赖库的下载
-
-移动端相关编译所需的第三方库均位于 `<PaddleLite>/third-party` 目录下，默认编译过程中，会利用`git submodule update --init --recursive`链上相关的第三方依赖的仓库。
-
-为加速`full_publish`、`test`编译模式中对`protobuf`等第三方依赖的下载，`build.sh` 和 `ci_build.sh`支持了从国内 CDN 下载第三方依赖的压缩包。
-
-使用方法：`git clone`完`Paddle-Lite`仓库代码后，手动删除本地仓库根目录下的`third-party`目录：
-
-```shell
-git clone https://github.com/PaddlePaddle/Paddle-Lite.git
-git checkout <release-version-tag>
-cd Paddle-Lite
-rm -rf third-party
-```
-
-之后再根据本文档，进行后续编译时，便会忽略第三方依赖对应的`submodule`，改为下载第三方压缩包。
+您可以编写应用代码，与预测库联合编译并测试结果。请参“[C++ 预测库 API 使用](https://aistudio.baidu.com/bjcpu/user/166411/248511/notebooks/248511.ipynb?redirects=1#C++%E9%A2%84%E6%B5%8BAPI)一节。

@@ -22,9 +22,9 @@ from recommonmark.transform import AutoStructify
 
 # -- Project information -----------------------------------------------------
 
-project = u'Paddle-Lite'
-copyright = u'2020, Paddle-Lite Developer'
-author = u'Paddle-Lite Developer'
+project = u'Paddle-Inference'
+copyright = u'2020, Paddle-Inference Developer'
+author = u'Paddle-Inference Developer'
 
 # The short X.Y version
 version = u'latest'

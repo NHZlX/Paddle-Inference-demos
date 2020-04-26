@@ -1,0 +1,5 @@
+*.o
+output
+*~
+*.pyc
+.DS_Store

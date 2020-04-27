@@ -1,8 +1,11 @@
 import numpy as np
 import argparse
+import cv2
 
 from paddle.fluid.core import AnalysisConfig
 from paddle.fluid.core import create_paddle_predictor
+
+from img_preprocess import preprocess
 
 def create_predictor(args):
    if args.model_dir is not "":
@@ -55,6 +58,8 @@ def parse_args():
 if __name__ == '__main__':
   args = parse_args()
   pred = create_predictor(args) 
-  img = np.ones((1, 3, 224, 224)).astype(np.float32)
+  img = cv2.imread('./ILSVRC2012_val_00000247.jpeg')
+  img = preprocess(img)
+  #img = np.ones((1, 3, 224, 224)).astype(np.float32)
   result = run(pred, [img]) 
-  print (result[0])
+  print ("class index: ", np.argmax(result[0][0]))

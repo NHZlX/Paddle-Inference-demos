@@ -3,7 +3,7 @@ cd build
 rm -rf *
 
 # same with the resnet50_test.cc
-DEMO_NAME=resnet50_test2
+DEMO_NAME=resnet50_test
 
 WITH_MKL=ON
 WITH_GPU=ON

@@ -1,11 +1,11 @@
 # Quick Start
 
-<h2 align="left">一：前提准备</h2>
+<h2 align="left">前提准备</h2>
 接下来我们会通过几段Python代码的方式对Paddle Inference使用进行介绍，
 为了能够成功运行代码，请您在环境中（Mac， Windows，Linux）安装不低于1.7版本的Paddle，
 安装Paddle 请参考[飞桨官网主页](https://www.paddlepaddle.org.cn/)。
 
-<h2 align="left">二：导出预测模型文件</h2>
+## 导出预测模型文件
 
 在模型训练期间，我们通常使用Python来构建模型结构，比如：
 
@@ -88,7 +88,7 @@ fluid.io.save_inference_model(dirname='./sample_model', feeded_var_names=['image
 
 
 
-<h2 align="left">三：加载模型预测</h2>
+## 加载模型预测
 
 1）使用load_inference方式
 

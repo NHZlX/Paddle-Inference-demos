@@ -3,10 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-.. image:: https://user-images.githubusercontent.com/5595332/80305535-da711900-87ef-11ea-8822-c596368f90df.png
-   :width: 390
-   :height: 70 
-===================
+Welcome to Paddle-Inference's documentation!
+=======================================
 
 .. toctree::
   :maxdepth: 1
@@ -29,11 +27,17 @@
 
 .. toctree::
   :maxdepth: 1
+  :caption: 性能调优
+  :name: sec-optimize
+  
+  optimize/paddle_trt
+  
+.. toctree::
+  :maxdepth: 1
   :caption: Benchmark
   :name: sec-benchmark
   
   benchmark/benchmark
-  benchmark/benchmark_tools
   
 .. toctree::
   :maxdepth: 1

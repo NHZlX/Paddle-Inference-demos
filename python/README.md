@@ -5,14 +5,15 @@
 在这个目录下，我们为大家准备了图像中使用的分类，检测，以及NLP使用Ernie/Bert模型等Python测试样例。
 
 
-##一：前提准备
+## 前提准备
 
 为了能够顺利运行样例，请您在环境中安装1.7或以上版本的Paddle，具体的安装方式请参照[飞桨官方页面](https://www.paddlepaddle.org.cn/)的指示方式。
 
 
 **验证是否安装成功：**
 
-1）Shell下进入python解释器
+1）Shell下进入python解释器     
+
 2） 输入`import paddle.fluid`，再输入`paddle.fluid.install_check.run_check()`
 
 如果出现`Your Paddle Fluid is installed successfully!`， 说明您已经成功安装。
